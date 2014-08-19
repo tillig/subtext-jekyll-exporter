@@ -1,20 +1,20 @@
 ﻿using System;
-using System.Data.SqlClient;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Serialization;
 
 namespace SubtextJekyllExporter
 {
 	internal class Program
 	{
-		private const string postFormat = @"---
+		private const string PostFormat = @"---
 layout: {0}
 title: ""{1}""
 date: {2}
@@ -25,13 +25,13 @@ categories: {4}
 {5}
 ";
 
-		private static readonly Regex _codeRegex = new Regex(@"~~~~ \{\.csharpcode\}(?<code>.*?)~~~~", RegexOptions.Compiled | RegexOptions.Singleline);
+		private static readonly Regex CodeRegex = new Regex(@"~~~~ \{\.csharpcode\}(?<code>.*?)~~~~", RegexOptions.Compiled | RegexOptions.Singleline);
 
 		// Strip the DIVs for tags that Windows Live Writer inserts.
 		//   <div class="tags">Technorati Tags:...</div>
 		//   <div class="tags clear">Technorati Tags:...</div>
 		//   <div style="..." id="scid:..." class="wlWriterEditableSmartContent">
-		private static readonly Regex _tagsRegex = new Regex(@"<div[^>]+?class=""(tags(\s*clear)?|wlWriterEditableSmartContent)"">.*?</div>", RegexOptions.Compiled | RegexOptions.Singleline);
+		private static readonly Regex TagsRegex = new Regex(@"<div[^>]+?class=""(tags(\s*clear)?|wlWriterEditableSmartContent)"">.*?</div>", RegexOptions.Compiled | RegexOptions.Singleline);
 
 		private static async Task<bool> CheckPostExistence(Uri uri)
 		{
@@ -43,9 +43,7 @@ categories: {4}
 
 		private static string ConvertHtmlToMarkdown(string source)
 		{
-			var args = "-r html -t markdown";
-
-			var startInfo = new ProcessStartInfo("pandoc.exe", args)
+			var startInfo = new ProcessStartInfo("pandoc.exe", "-r html -t markdown")
 												{
 													RedirectStandardOutput = true,
 													RedirectStandardInput = true,
@@ -78,27 +76,14 @@ categories: {4}
 				.Replace("{%", "{{ \"{%\" }}");
 		}
 
+		// TODO: Figure out if the code regex works for me - most of my code is in <pre> blocks.
 		private static string FormatCode(string content)
 		{
-			return _codeRegex.Replace(content, match =>
+			return CodeRegex.Replace(content, match =>
 			{
 				var code = match.Groups["code"].Value;
 				return "```" + GetLanguage(code) + code + "```";
 			});
-		}
-
-		private static string GetExportSqlScript()
-		{
-			var assembly = Assembly.GetExecutingAssembly();
-			const string resourceName = "SubtextJekyllExporter.select-content-for-jekyll.sql";
-
-			using (var stream = assembly.GetManifestResourceStream(resourceName))
-			{
-				using (var reader = new StreamReader(stream))
-				{
-					return reader.ReadToEnd();
-				}
-			}
 		}
 
 		private static string GetLanguage(string code)
@@ -119,64 +104,70 @@ categories: {4}
 		{
 			if (args.Length != 3)
 			{
-				Console.WriteLine("Please pass a database name, an export directory, and your current blog host.");
+				Console.WriteLine("Please pass an XML export filename, an export directory for the markdown output, and your current blog host.");
 				return;
 			}
-			var databaseName = args[0];
+
+			var exportFileName = args[0];
 			var rootDirectory = args[1];
 			var host = args[2];
-			var connectionString =
-																String.Format(@"Data Source=.\SQLEXPRESS;Initial Catalog={0};Integrated Security=True", databaseName);
+
+			var serializer = new XmlSerializer(typeof(BlogEntry));
+			var entries = new List<BlogEntry>();
+			using (var importStream = File.OpenRead(exportFileName))
+			using (var importReader = XmlReader.Create(importStream))
+			{
+				importReader.MoveToElement();
+				importReader.MoveToContent();
+				while (importReader.Read())
+				{
+					var xml = importReader.ReadOuterXml();
+					if (String.IsNullOrWhiteSpace(xml))
+					{
+						continue;
+					}
+					using (var serializedReader = new StringReader(xml))
+					{
+						entries.Add((BlogEntry)serializer.Deserialize(serializedReader));
+					}
+				}
+			}
+
+			Directory.CreateDirectory(rootDirectory);
 			using (var mismatches = new StreamWriter(Path.Combine(rootDirectory, ".mismatches")))
 			{
-				using (var connection = new SqlConnection(connectionString))
+				foreach (var entry in entries)
 				{
-					connection.Open();
-					var command = new SqlCommand(GetExportSqlScript(), connection);
-					using (var reader = command.ExecuteReader())
+					var filePath = entry.FilePath.Replace(Environment.NewLine, "");
+					var content = FormatCode(EscapeJekyllTags(ConvertHtmlToMarkdown(StripTagsDiv(entry.Text))));
+					var formattedContent = String.Format(PostFormat, entry.Layout, entry.Title, entry.Date, entry.Id, entry.Categories, content);
+					var postUrl = new Uri("http://" + host + "/archive/" + entry.UrlDate + "/" + entry.EntryName + ".aspx");
+					try
 					{
-						while (reader.Read())
+						// TODO: Uncomment the post existence checker.
+						var exists = true;// CheckPostExistence(postUrl).Result;
+						if (!exists)
 						{
-							var filePath = reader.GetString(0).Replace(Environment.NewLine, "");
-							var content = FormatCode(EscapeJekyllTags(ConvertHtmlToMarkdown(StripTagsDiv(reader.GetString(1)))));
-							var layout = reader.GetString(2);
-							var title = reader.GetString(3);
-							var date = reader.GetString(4);
-							var categories = reader.GetString(5);
-							var postId = reader.GetInt32(6).ToString(CultureInfo.InvariantCulture);
-							var slug = reader.GetString(7);
-							var urlDate = reader.GetString(8);
-
-							var formattedContent = String.Format(postFormat, layout, title, date, postId, categories, content);
-
-							var postUrl =
-																																new Uri("http://" + host + "/archive/" + urlDate + "/" + slug + ".aspx");
-							try
-							{
-								var exists = CheckPostExistence(postUrl).Result;
-								if (!exists)
-								{
-									mismatches.WriteLine(postUrl);
-								}
-							}
-							catch (Exception)
-							{
-								mismatches.WriteLine("EXCEPTION: " + postUrl);
-							}
-
-							var path = Path.Combine(rootDirectory, filePath);
-							EnsurePath(path);
-							Console.WriteLine("Writing: " + title);
-							File.WriteAllText(path, formattedContent, new UTF8Encoding(false));
+							mismatches.WriteLine(postUrl);
 						}
 					}
+					catch (Exception ex)
+					{
+						mismatches.WriteLine("EXCEPTION: " + postUrl);
+						mismatches.WriteLine(ex);
+					}
+
+					var path = Path.Combine(rootDirectory, filePath);
+					EnsurePath(path);
+					Console.WriteLine("Writing: " + entry.Title);
+					File.WriteAllText(path, formattedContent, new UTF8Encoding(false));
 				}
 			}
 		}
 
 		private static string StripTagsDiv(string content)
 		{
-			return _tagsRegex.Replace(content, "");
+			return TagsRegex.Replace(content, "");
 		}
 	}
 }
