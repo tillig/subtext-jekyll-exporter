@@ -76,7 +76,6 @@ categories: {4}
 				.Replace("{%", "{{ \"{%\" }}");
 		}
 
-		// TODO: Figure out if the code regex works for me - most of my code is in <pre> blocks.
 		private static string FormatCode(string content)
 		{
 			return CodeRegex.Replace(content, match =>
@@ -148,8 +147,7 @@ categories: {4}
 					var postUrl = new Uri("http://" + host + "/archive/" + entry.UrlDate + "/" + entry.EntryName + ".aspx");
 					try
 					{
-						// TODO: Uncomment the post existence checker.
-						var exists = true;// CheckPostExistence(postUrl).Result;
+						var exists = CheckPostExistence(postUrl).Result;
 						if (!exists)
 						{
 							mismatches.WriteLine(postUrl);
