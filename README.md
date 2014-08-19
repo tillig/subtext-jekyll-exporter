@@ -5,8 +5,8 @@ A combination of a database admin page and console app that exports a Subtext da
 
 This is a fork of [Phil Haack's Subtext Jekyll Exporter](https://github.com/Haacked/subtext-jekyll-exporter) updated to handle some quirks I have that weren't in Haack's Subtext deployment:
 
-	* I don't have direct SQL Management Console access to my database so I use a small ASPX page to export the blog content in XML format and the console app works off the XML.
-	* Haack had a later database format than Subtext 2.5.2.0 and his exporter referred to columns that I don't have. I have stock Subtext 2.5.2.0.
+- I don't have direct SQL Management Console access to my database so I use a small ASPX page to export the blog content in XML format and the console app works off the XML.
+- Haack had a later database format than Subtext 2.5.2.0 and his exporter referred to columns that I don't have. I have stock Subtext 2.5.2.0.
 
 ## USAGE
 
