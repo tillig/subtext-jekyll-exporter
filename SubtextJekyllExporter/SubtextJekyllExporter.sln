@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2013
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SubtextJekyllExporter", "SubtextJekyllExporter\SubtextJekyllExporter.csproj", "{C4F85E59-49A9-4F81-BF99-F77324FBDC50}"
 EndProject
 Global
