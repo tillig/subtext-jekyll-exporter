@@ -117,11 +117,15 @@ categories: {4}
 			using (var importStream = File.OpenRead(exportFileName))
 			using (var importReader = XmlReader.Create(importStream))
 			{
+				// Get past the root element.
 				importReader.MoveToElement();
 				importReader.MoveToContent();
-				while (importReader.Read())
+				importReader.Read();
+
+				// Read the children - each child is an entry to deserialize.
+				string xml = "";
+				while ((xml = importReader.ReadOuterXml()) != "")
 				{
-					var xml = importReader.ReadOuterXml();
 					if (String.IsNullOrWhiteSpace(xml))
 					{
 						continue;
