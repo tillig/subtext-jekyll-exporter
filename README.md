@@ -10,7 +10,10 @@ This is a fork of [Phil Haack's Subtext Jekyll Exporter](https://github.com/Haac
 
 ## USAGE
 
-Drop the `JekyllExport.aspx` in your Subtext install where you can get to it from a browser. Hit the page and save the output as XML. Run the console app against the XML to do the conversion to markdown.
+Drop the `JekyllExport.aspx` and `DisqusCommentExport.aspx` pages in your Subtext install where you can get to them from a browser. Hit the pages and save the output as XML.
+
+- Run the console app against the JekyllExport XML to do the conversion to markdown.
+- Use the output from DisqusCommentExport to import your comments into Disqus.
 
 ## LICENSE
 
