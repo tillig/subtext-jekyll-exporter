@@ -7,33 +7,48 @@
 <%@ Import Namespace="Subtext.Framework.Providers" %>
 
 <script runat="server">
+// The Disqus format is documented here:
+// https://help.disqus.com/customer/portal/articles/472150
 
-const string ExportSql = @"WITH XMLNAMESPACES
+// This should be the number of hours to ADD
+// to a date/time to convert to GMT. For example,
+// PST is GMT-0800, so ADD 8 to make it GMT.
+// Yeah, there's some daylight saving challenge here
+// but it's a one-timer. Does it matter?
+const int HoursToConvertToGMT = 8;
+
+// Blog URL with trailing slash for generating links
+// to entries.
+const string Host = "http://www.paraesthesia.com/";
+
+private static readonly string ExportSql = @"WITH XMLNAMESPACES
 (
-    'http://purl.org/dc/elements/1.1/' AS dc,
-    'http://wordpress.org/export/1.0/excerpt/' AS excerpt,
     'http://purl.org/rss/1.0/modules/content/' AS content,
-    'http://wellformedweb.org/CommentAPI/' AS wfw,
+	'http://www.disqus.com/' AS dsq,
+    'http://purl.org/dc/elements/1.1/' AS dc,
     'http://wordpress.org/export/1.0/' AS wp
 )
 
-SELECT Title AS 'title',
-    '1.0' AS 'wp:wxr_version',
-    (
+SELECT (
         SELECT Title AS 'title',
-            DateAdded AS 'pubDate',
-            ID AS 'wp:post_id',
-            EntryName AS 'wp:post_name',
-            'publish' AS 'wp:status',
-            'post' AS 'wp:post_type',
-            DateSyndicated AS 'wp:post_date',
+			link = '" + Host + @"' + (
+				CASE PostType
+				WHEN 2 THEN 'articles/' + EntryName + '.aspx'
+				ELSE 'archive/' + SUBSTRING(CONVERT(VARCHAR, DateAdded, 111), 1, 10)
+					+ '/' + EntryName + '.aspx'
+				END),
+			Text as 'content:encoded',
+            ID AS 'dsq:thread_identifier',
+            CONVERT(VARCHAR, DATEADD(hour," + HoursToConvertToGMT + @", DateAdded), 120) AS 'wp:post_date_gmt',
+			'closed' AS 'wp:comment_status',
             (
                 SELECT Id AS 'wp:comment_id',
                     Author AS 'wp:comment_author',
                     Email AS 'wp:comment_author_email',
                     IpAddress AS 'wp:comment_author_IP',
-                    DateCreated AS 'wp:comment_date',
-                    Body AS 'wp:comment_content'
+                    CONVERT(VARCHAR, DATEADD(hour, " + HoursToConvertToGMT + @", DateCreated), 120) AS 'wp:comment_date_gmt',
+                    Body AS 'wp:comment_content',
+					1 AS 'wp:comment_approved'
                 FROM subtext_FeedBack
                 WHERE FeedbackType = 1 AND EntryId = content.ID
                 FOR XML PATH('wp:comment'), TYPE
