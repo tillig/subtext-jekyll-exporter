@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Serialization;
@@ -20,18 +18,10 @@ title: ""{1}""
 date: {2}
 comments: true
 disqus_identifier: {3}
-categories: {4}
+tags: {4}
 ---
 {5}
 ";
-
-		private static readonly Regex CodeRegex = new Regex(@"~~~~ \{\.csharpcode\}(?<code>.*?)~~~~", RegexOptions.Compiled | RegexOptions.Singleline);
-
-		// Strip the DIVs for tags that Windows Live Writer inserts.
-		//   <div class="tags">Technorati Tags:...</div>
-		//   <div class="tags clear">Technorati Tags:...</div>
-		//   <div style="..." id="scid:..." class="wlWriterEditableSmartContent">
-		private static readonly Regex TagsRegex = new Regex(@"<div[^>]+?class=""(tags(\s*clear)?|wlWriterEditableSmartContent)"">.*?</div>", RegexOptions.Compiled | RegexOptions.Singleline);
 
 		private static async Task<bool> CheckPostExistence(Uri uri)
 		{
@@ -41,62 +31,9 @@ categories: {4}
 			return response.StatusCode == HttpStatusCode.OK;
 		}
 
-		private static string ConvertHtmlToMarkdown(string source)
-		{
-			var startInfo = new ProcessStartInfo("pandoc.exe", "-r html -t markdown")
-												{
-													RedirectStandardOutput = true,
-													RedirectStandardInput = true,
-													UseShellExecute = false
-												};
-
-			var process = new Process { StartInfo = startInfo };
-			process.Start();
-
-			var inputBuffer = Encoding.UTF8.GetBytes(source);
-			process.StandardInput.BaseStream.Write(inputBuffer, 0, inputBuffer.Length);
-			process.StandardInput.Close();
-
-			process.WaitForExit(2000);
-			using (var sr = new StreamReader(process.StandardOutput.BaseStream))
-			{
-				return sr.ReadToEnd();
-			}
-		}
-
 		private static void EnsurePath(string path)
 		{
 			Directory.CreateDirectory(Path.GetDirectoryName(path));
-		}
-
-		private static string EscapeJekyllTags(string content)
-		{
-			return content
-				.Replace("{{", "{{ \"{{\" }}")
-				.Replace("{%", "{{ \"{%\" }}");
-		}
-
-		private static string FormatCode(string content)
-		{
-			return CodeRegex.Replace(content, match =>
-			{
-				var code = match.Groups["code"].Value;
-				return "```" + GetLanguage(code) + code + "```";
-			});
-		}
-
-		private static string GetLanguage(string code)
-		{
-			var trimmedCode = code.Trim();
-			if (trimmedCode.Contains("<%= ") || trimmedCode.Contains("<%: "))
-			{
-				return "aspx-cs";
-			}
-			if (trimmedCode.StartsWith("<script") || trimmedCode.StartsWith("<table"))
-			{
-				return "html";
-			}
-			return "csharp";
 		}
 
 		private static void Main(string[] args)
@@ -142,9 +79,16 @@ categories: {4}
 				foreach (var entry in entries)
 				{
 					var filePath = entry.FilePath.Replace(Environment.NewLine, "");
-					var content = FormatCode(EscapeJekyllTags(ConvertHtmlToMarkdown(StripTagsDiv(entry.Text))));
+					var content = entry.Text
+						.StripTagsDiv()
+						.ConvertHtmlToMarkdown()
+						.EscapeJekyllTags()
+						.FormatCode()
+						.FixEscapedNewlines()
+						.FixSuperscript();
+
 					var formattedContent = String.Format(PostFormat, entry.Layout, entry.Title, entry.Date, entry.Id, entry.Categories, content);
-					var postUrl = new Uri("http://" + host + "/archive/" + entry.UrlDate + "/" + entry.EntryName + ".aspx");
+					/*var postUrl = new Uri(String.Format("http://{0}/archive/{1}/{2}.aspx", host, entry.UrlDate, entry.EntryName));
 					try
 					{
 						var exists = CheckPostExistence(postUrl).Result;
@@ -157,7 +101,7 @@ categories: {4}
 					{
 						mismatches.WriteLine("EXCEPTION: " + postUrl);
 						mismatches.WriteLine(ex);
-					}
+					}*/
 
 					var path = Path.Combine(rootDirectory, filePath);
 					EnsurePath(path);
@@ -165,11 +109,6 @@ categories: {4}
 					File.WriteAllText(path, formattedContent, new UTF8Encoding(false));
 				}
 			}
-		}
-
-		private static string StripTagsDiv(string content)
-		{
-			return TagsRegex.Replace(content, "");
 		}
 	}
 }
