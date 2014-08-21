@@ -81,6 +81,7 @@ tags: {4}
 					var filePath = entry.FilePath.Replace(Environment.NewLine, "");
 					var content = entry.Text
 						.StripTagsDiv()
+						.MakeInternalLinksRelative(host)
 						.ConvertHtmlToMarkdown()
 						.EscapeJekyllTags()
 						.FormatCode()
@@ -88,7 +89,7 @@ tags: {4}
 						.FixSuperscript();
 
 					var formattedContent = String.Format(PostFormat, entry.Layout, entry.Title, entry.Date, entry.Id, entry.Categories, content);
-					/*var postUrl = new Uri(String.Format("http://{0}/archive/{1}/{2}.aspx", host, entry.UrlDate, entry.EntryName));
+					var postUrl = new Uri(String.Format("http://{0}/archive/{1}/{2}.aspx", host, entry.UrlDate, entry.EntryName));
 					try
 					{
 						var exists = CheckPostExistence(postUrl).Result;
@@ -101,7 +102,7 @@ tags: {4}
 					{
 						mismatches.WriteLine("EXCEPTION: " + postUrl);
 						mismatches.WriteLine(ex);
-					}*/
+					}
 
 					var path = Path.Combine(rootDirectory, filePath);
 					EnsurePath(path);

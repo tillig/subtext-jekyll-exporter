@@ -72,6 +72,13 @@ namespace SubtextJekyllExporter
 			});
 		}
 
+		public static string MakeInternalLinksRelative(this string content, string host)
+		{
+			var rootRegex = new Regex("=\"http://" + host + "/?\"");
+			var subPathRegex = new Regex("=\"http://" + host + "(/[^\"]+)\"");
+			return subPathRegex.Replace(rootRegex.Replace(content, "=\"/\""), "=\"$1\"");
+		}
+
 		public static string StripTagsDiv(this string content)
 		{
 			return TagsRegex.Replace(content, "");
